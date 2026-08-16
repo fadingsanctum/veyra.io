@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+/* ============================================================
+   VEYRA.IO — design tokens ("Beyond the Walls")
+   dark is the default theme; dim / light override via
+   data-theme on <html>, set before hydration by an inline script.
+   ============================================================ */
+
+:root {
+  --bg-void: #0a0908; /* near-black, warm not blue */
+  --bg-panel: #15130f;
+  --bg-elevated: #1c1812;
+  --accent-blood: #9a1b1b; /* the one saturated color in the UI */
+  --accent-ember: #c4501d;
+  --ink-bone: #e8e2d0;
+  --ink-dim: #8a8375;
+  --line-rust: #2a241c;
+
+  /* wall silhouette layers (hero) — adapt per theme */
+  --wall-far: color-mix(in srgb, var(--bg-panel) 28%, var(--bg-void));
+  --wall-mid: color-mix(in srgb, var(--bg-panel) 60%, var(--bg-void));
+  --wall-near: var(--bg-panel);
+
+  --glass-bg: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  --glass-border: color-mix(in srgb, var(--line-rust) 85%, transparent);
+
+  --crack-core: #e8590f; /* hot ember light bleeding through the wall */
+  --crack-glow: rgba(154, 27, 27, 0.55);
+  --ember-glow: rgba(196, 80, 29, 0.55);
+
+  --shadow-blood: 0 0 0 1px rgba(154, 27, 27, 0.4), 0 10px 44px -14px rgba(154, 27, 27, 0.55);
+  --shadow-ember: 0 0 0 1px rgba(196, 80, 29, 0.45), 0 12px 48px -14px rgba(196, 80, 29, 0.5);
+  --shadow-card: 0 24px 70px -28px rgba(0, 0, 0, 0.9);
+}
+
+html[data-theme="dim"] {
+  --bg-void: #161412;
+  --bg-panel: #1f1c17;
+  --bg-elevated: #27231b;
+  --accent-blood: #a82020;
+  --accent-ember: #d05c22;
+  --ink-bone: #ece6d4;
+  --ink-dim: #a39b8b;
+  --line-rust: #38312a;
+}
+
+html[data-theme="light"] {
+  --bg-void: #efeae0;
+  --bg-panel: #faf7f0;
+  --bg-elevated: #ffffff;
+  --accent-blood: #8e1515;
+  --accent-ember: #b34a12;
+  --ink-bone: #221d15;
+  --ink-dim: #6f675a;
+  --line-rust: #ddd4c2;
+  --wall-far: color-mix(in srgb, var(--bg-panel) 35%, var(--bg-void));
+  --wall-mid: color-mix(in srgb, var(--bg-panel) 65%, var(--bg-void));
+  --wall-near: var(--bg-panel);
+  --glass-bg: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  --glass-border: color-mix(in srgb, var(--line-rust) 75%, transparent);
+  --shadow-blood: 0 0 0 1px rgba(142, 21, 21, 0.35), 0 10px 40px -16px rgba(142, 21, 21, 0.4);
+  --shadow-ember: 0 0 0 1px rgba(179, 74, 18, 0.4), 0 12px 44px -16px rgba(179, 74, 18, 0.4);
+  --shadow-card: 0 24px 70px -34px rgba(90, 66, 30, 0.45);
+}
+
+@theme inline {
+  --color-void: var(--bg-void);
+  --color-panel: var(--bg-panel);
+  --color-elevated: var(--bg-elevated);
+  --color-blood: var(--accent-blood);
+  --color-ember: var(--accent-ember);
+  --color-bone: var(--ink-bone);
+  --color-dim: var(--ink-dim);
+  --color-rust: var(--line-rust);
+  --color-crack: var(--crack-core);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-cinzel);
+  --font-mono: var(--font-jetbrains);
+}
+
+@utility shadow-blood {
+  box-shadow: var(--shadow-blood);
+}
+
+@utility shadow-ember {
+  box-shadow: var(--shadow-ember);
+}
+
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-border);
+}
+
+@layer base {
+  * {
+    border-color: var(--line-rust);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  html[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--bg-void);
+    color: var(--ink-bone);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--accent-blood);
+    color: var(--ink-bone);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-ember);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  input::placeholder {
+    color: var(--ink-dim);
+    opacity: 0.75;
+  }
+}
+
+/* ---------- scrollbar: ember-tinted, never the dead default ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-ember) 35%, transparent);
+  border-radius: 8px;
+  border: 2px solid var(--bg-panel);
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-ember) 70%, transparent);
+}
+* {
+  scrollbar-color: color-mix(in srgb, var(--accent-ember) 35%, transparent) var(--bg-panel);
+  scrollbar-width: thin;
+}
+
+/* ---------- keyframes ---------- */
+@keyframes ember-rise {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  12% {
+    opacity: var(--ember-opacity, 0.75);
+  }
+  100% {
+    transform: translateY(-46vh) translateX(var(--ember-drift, 24px)) scale(0.15);
+    opacity: 0;
+  }
+}
+
+@keyframes crack-flicker {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  42% {
+    opacity: 1;
+  }
+  58% {
+    opacity: 0.66;
+  }
+  74% {
+    opacity: 0.92;
+  }
+}
+
+@keyframes scan-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes spark-trail {
+  0% {
+    transform: translateX(-6px) scaleX(0.4);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(calc(100% + 6px)) scaleX(1);
+    opacity: 0;
+  }
+}
+
+@keyframes ash-settle {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(34px) translateX(var(--ash-drift, -10px)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+/* ---------- reduced motion: swap transforms for quiet fades ---------- */
+/* User opted in via Settings (independent of OS preference) */
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
