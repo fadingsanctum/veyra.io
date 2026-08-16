@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#0A0908"/>
-  <path d="M32 50 L13 31 L6 35 L22 56 Z" fill="#E8E2D0" opacity="0.92"/>
-  <path d="M32 50 L51 31 L58 35 L42 56 Z" fill="#E8E2D0" opacity="0.92"/>
-  <path d="M32 16 L36.5 25 L32 34 L27.5 25 Z" fill="#9A1B1B"/>
-  <path d="M13 31 L20 38 L15 41 Z" fill="#0A0908" opacity="0.5"/>
-  <path d="M51 31 L44 38 L49 41 Z" fill="#0A0908" opacity="0.5"/>
-</svg>
