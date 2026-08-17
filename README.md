@@ -64,8 +64,8 @@ of URLs queues each one automatically.
 | `/api/sites` | GET | Live list of supported platforms (extractors) |
 
 Errors are classified (`unsupported`, `unavailable`, `age_restricted`,
-`network`, `ffmpeg`, `format_unavailable`, `rate_limited`, …) so the `/help`
-troubleshooting table stays data-driven.
+`blocked`, `login_required`, `network`, `ffmpeg`, `format_unavailable`,
+`rate_limited`, …) so the `/help` troubleshooting table stays data-driven.
 
 ## Security guardrails
 
@@ -152,6 +152,8 @@ rebuild periodically to inherit new-site support.
 | `VEYRA_ENGINE_PATH` | engine binary name | Path to the download engine binary |
 | `VEYRA_NO_AUTO_BOOTSTRAP` | `0` | Set to `1` to disable auto-downloading the engine when it's missing |
 | `VEYRA_MAX_CONCURRENT` | `3` | Hard cap on concurrent downloads |
+| `VEYRA_COOKIES` | — | Inline Netscape `cookies.txt` content (export with a “Get cookies.txt LOCALLY” extension) — the worker materializes it to a temp file and passes it to the engine. The easy option on hosts without disk mounts (Render). Unlocks login-walled platforms (Instagram, Pinterest…) and softens YouTube bot checks. |
+| `VEYRA_COOKIES_FILE` | — | Path to a `cookies.txt` on the server (VPS/Docker with mounts) instead of inline content. |
 
 ## Legal
 
