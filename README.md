@@ -77,20 +77,73 @@ troubleshooting table stays data-driven.
 - Jobs write only into a per-job temp directory under the OS temp folder and
   are swept after a few hours.
 
-## Architecture notes (for production deployment)
+## Deploying for real (why Vercel alone fails)
 
-The frontend is plain Next.js and deploys anywhere (Vercel). The engine
-worker, however, is **not serverless-friendly**: long-running downloads and
-FFmpeg don't fit request/response lifetimes. Recommended topology:
+**If you deployed to Vercel (or any serverless platform) and pasting a link
+shows *"Veyra's download engine isn't installed on this server"* — that's
+expected and can't be fixed with config.** Two reasons:
 
-- **Vercel** — frontend + `/api/resolve` + queue API
-- **Always-on container** (Railway / Render / Fly.io) — the actual download
-  worker; set `VEYRA_ENGINE_PATH`, `VEYRA_MAX_CONCURRENT`, and a cron for the
-  engine's standard pip upgrade
+1. The engine auto-installs itself into `~/.veyra/bin` on first use, but
+   serverless functions have a **read-only filesystem**, so the install fails
+   silently and every call falls back to the error above.
+2. Even with the binary present, downloads **cannot work serverless**: the job
+   queue lives in the server process's memory, each request can hit a different
+   instance, and a 30-minute download outlives any function's lifetime.
 
-The in-memory job queue in `lib/queue.ts` keeps the same API surface for
-single-instance use. For multi-instance scale-out, swap it for a Redis-backed
-queue (e.g. BullMQ) — the route handlers and client poller don't need to change.
+The download engine needs an **always-on host**. Free options, ranked:
+
+| Option | Cost | Always-on? | Effort | Notes |
+| --- | --- | --- | --- | --- |
+| **Oracle Cloud Always Free VPS** | $0 forever | ✅ | Medium | 4 ARM vCPU / 24 GB RAM. Only genuinely free *and* always-on (no cold starts). Needs an SSH + Docker setup (script provided) and Oracle may reclaim truly-idle instances. |
+| **Render free web service** | $0 | ❌ sleeps after 15 min | Low | One-click from GitHub (blueprint included). ~50s cold start on the first request. No credit card. |
+| Railway "free" | $5 one-time credit | — | — | Not enough to stay up 24/7 — it's a trial, not a free tier. |
+| Fly.io | — | — | — | No free tier for new signups. |
+
+### Option A — free VPS (Oracle Cloud), truly always-on
+
+1. Sign up at <https://www.oracle.com/cloud/free/> and create an **Ampere
+   (ARM) VM** in your home region with **Ubuntu 22.04/24.04** (Always Free:
+   4 vCPU / 24 GB RAM / 200 GB disk).
+2. SSH into the box, then run the setup script (installs Docker, clones the
+   repo, builds and starts the app on port 80):
+
+   ```bash
+   VEYRA_REPO=https://github.com/<you>/<repo>.git sudo ./deploy/oracle-vps.sh
+   ```
+
+   For a private repo, pass a GitHub token: `VEYRA_TOKEN=ghp_…`.
+
+3. Point a domain at the VM's public IP and enable HTTPS (e.g. install
+   `nginx` + `certbot`). The app is on port 80 by default (`VEYRA_PORT=443`
+   if you terminate TLS at nginx).
+
+Keep the instance non-idle (a cron ping or real traffic) so Oracle doesn't
+reclaim it.
+
+### Option B — Render free (easiest, sleeps when idle)
+
+1. Sign up at <https://render.com> (no credit card).
+2. **New + → Blueprint** → select this repo. The included `render.yaml`
+   creates the web service from the `Dockerfile` (yt-dlp + ffmpeg bundled).
+
+The free instance sleeps after 15 minutes of inactivity — the first request
+of the day takes ~50s to spin up, then everything works. Upgrade the plan if
+you want always-on.
+
+### The `Dockerfile`
+
+`docker build -t veyra . && docker run -d -p 80:3000 veyra` runs the whole
+app (frontend + engine worker) in one container — works on any VPS or
+container host, amd64 or arm64. yt-dlp is pinned to latest at build time;
+rebuild periodically to inherit new-site support.
+
+## Architecture notes
+
+- The in-memory job queue in `lib/queue.ts` keeps the same API surface for
+  single-instance use. For multi-instance scale-out, swap it for a Redis-backed
+  queue (e.g. BullMQ) — the route handlers and client poller don't need to change.
+- On hosts with a read-only home directory, the engine auto-install falls back
+  to the OS temp dir; disable auto-install entirely with `VEYRA_NO_AUTO_BOOTSTRAP=1`.
 
 ### Env vars
 

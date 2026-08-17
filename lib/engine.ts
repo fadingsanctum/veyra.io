@@ -44,6 +44,27 @@ const BOOTSTRAP_ENABLED = process.env.VEYRA_NO_AUTO_BOOTSTRAP !== "1";
 const BOOTSTRAP_DIR = path.join(os.homedir(), ".veyra", "bin");
 let bootstrapPromise: Promise<string | null> | null = null;
 
+/**
+ * Pick a writable install dir for the engine binary. Prefers ~/.veyra/bin and
+ * falls back to the OS temp dir when the home directory is read-only (common on
+ * managed/container hosts). Returns null when nothing is writable.
+ */
+function bootstrapTargetDir(): string | null {
+  const candidates = [BOOTSTRAP_DIR, path.join(os.tmpdir(), "veyra-bin")];
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const probe = path.join(dir, `.probe-${process.pid}`);
+      fs.writeFileSync(probe, "ok");
+      fs.rmSync(probe, { force: true });
+      return dir;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return null;
+}
+
 /** Official static binaries, per platform. */
 function bootstrapUrl(): string {
   const base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
@@ -54,9 +75,17 @@ function bootstrapUrl(): string {
 
 async function downloadEngine(): Promise<string | null> {
   const url = bootstrapUrl();
-  const target = path.join(BOOTSTRAP_DIR, process.platform === "win32" ? ENGINE_NAME_WIN : ENGINE_NAME);
+  const dir = bootstrapTargetDir();
+  if (!dir) {
+    console.warn(
+      `[veyra] Could not auto-install the download engine: no writable directory ` +
+        `(tried ${BOOTSTRAP_DIR} and ${path.join(os.tmpdir(), "veyra-bin")}). ` +
+        `Install yt-dlp manually or set VEYRA_ENGINE_PATH to the binary.`,
+    );
+    return null;
+  }
+  const target = path.join(dir, process.platform === "win32" ? ENGINE_NAME_WIN : ENGINE_NAME);
   try {
-    fs.mkdirSync(BOOTSTRAP_DIR, { recursive: true });
     const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
     const buf = Buffer.from(await res.arrayBuffer());
