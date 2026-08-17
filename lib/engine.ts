@@ -8,12 +8,151 @@
  */
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { FlatEntry, FormatInfo, PlaylistInfo, ResolveResult, VideoInfo } from "./types";
 
-/** Path to the engine binary. Defaults to the standard executable name. */
-const ENGINE = process.env.VEYRA_ENGINE_PATH || "yt-dlp";
 const RESOLVE_TIMEOUT_MS = 90_000;
+
+/*
+ * Engine binary discovery.
+ *
+ * The engine is spawned by name (yt-dlp), which fails with `spawn yt-dlp ENOENT`
+ * when it isn't on the process PATH — common when it's installed via pip into a
+ * user Scripts dir, pipx, or a Homebrew prefix that isn't exported to this
+ * process. We resolve the binary once, in order of preference:
+ *
+ *   1. VEYRA_ENGINE_PATH (explicit path or name)
+ *   2. PATH lookup
+ *   3. common install locations for the current platform
+ *
+ * If nothing is found we fall back to the bare name and let the spawn fail,
+ * which classifyError() turns into a clear `engine_missing` error.
+ */
+
+const ENGINE_NAME = "yt-dlp";
+const ENGINE_NAME_WIN = "yt-dlp.exe";
+
+/** Directories where the engine commonly lands without being on PATH. */
+function commonEngineDirs(): string[] {
+  const home = os.homedir();
+  const dirs = [path.join(home, ".local", "bin"), path.join(home, "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA;
+    const appData = process.env.APPDATA;
+    if (localAppData) {
+      // pip installs: %LOCALAPPDATA%\Programs\Python\Python3xx\Scripts
+      const pyRoot = path.join(localAppData, "Programs", "Python");
+      try {
+        for (const entry of fs.readdirSync(pyRoot)) {
+          if (/^Python\d+/.test(entry)) dirs.push(path.join(pyRoot, entry, "Scripts"));
+        }
+      } catch {
+        /* no per-user Python install */
+      }
+      // WinGet shims
+      dirs.push(path.join(localAppData, "Microsoft", "WinGet", "Links"));
+    }
+    if (appData) {
+      // pip --user installs: %APPDATA%\Python\Python3xx\Scripts
+      const pyRoot = path.join(appData, "Python");
+      try {
+        for (const entry of fs.readdirSync(pyRoot)) {
+          if (/^Python\d+/.test(entry)) dirs.push(path.join(pyRoot, entry, "Scripts"));
+        }
+      } catch {
+        /* no user-site Python */
+      }
+    }
+    if (home) dirs.push(path.join(home, ".local", "bin")); // Git-Bash / MSYS world
+  }
+
+  return dirs;
+}
+
+function isExecutable(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findInDir(dir: string): string | null {
+  const names = process.platform === "win32" ? [ENGINE_NAME_WIN, ENGINE_NAME] : [ENGINE_NAME];
+  for (const name of names) {
+    const candidate = path.join(dir, name);
+    if (isExecutable(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findOnPath(name = ENGINE_NAME): string | null {
+  const pathVar = process.env.PATH ?? "";
+  const sep = process.platform === "win32" ? ";" : ":";
+  for (const dir of pathVar.split(sep)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, name);
+    if (isExecutable(candidate)) return candidate;
+  }
+  return null;
+}
+
+let cachedResolve: { binary: string; found: boolean } | null = null;
+
+function resolveEngine(): { binary: string; found: boolean } {
+  if (cachedResolve) return cachedResolve;
+
+  // 1. Explicit env var. A path must exist; a bare name is trusted (the OS
+  //    resolves it via PATH), but resolved to an absolute path when possible.
+  const env = process.env.VEYRA_ENGINE_PATH?.trim();
+  if (env) {
+    const looksLikePath = path.isAbsolute(env) || env.includes("/") || env.includes("\\");
+    if (looksLikePath) {
+      cachedResolve = { binary: env, found: isExecutable(env) };
+      return cachedResolve;
+    }
+    const onPath = findOnPath(env);
+    cachedResolve = onPath ? { binary: onPath, found: true } : { binary: env, found: true };
+    return cachedResolve;
+  }
+
+  // 2. PATH lookup (try the .exe variant too on Windows)
+  const pathNames = process.platform === "win32" ? [ENGINE_NAME, ENGINE_NAME_WIN] : [ENGINE_NAME];
+  for (const name of pathNames) {
+    const onPath = findOnPath(name);
+    if (onPath) {
+      cachedResolve = { binary: onPath, found: true };
+      return cachedResolve;
+    }
+  }
+
+  // 3. Common install locations
+  for (const dir of commonEngineDirs()) {
+    const found = findInDir(dir);
+    if (found) {
+      cachedResolve = { binary: found, found: true };
+      return cachedResolve;
+    }
+  }
+
+  // 4. Give up — spawn will fail with ENOENT, surfaced as `engine_missing`.
+  cachedResolve = { binary: ENGINE_NAME, found: false };
+  return cachedResolve;
+}
+
+/** Absolute path (or bare name) to use when spawning the engine. */
+export function engineBinary(): string {
+  return resolveEngine().binary;
+}
+
+/** Whether a usable engine binary was found on this server. */
+export function engineAvailable(): boolean {
+  return resolveEngine().found;
+}
 
 export class EngineError extends Error {
   code: string;
@@ -28,6 +167,13 @@ export class EngineError extends Error {
 /** Classify engine stderr so /help troubleshooting can be data-driven. */
 export function classifyError(stderr: string): { code: string; message: string } {
   const s = stderr.toLowerCase();
+  if (s.includes("enoent") || s.includes("not recognized as an internal or external command")) {
+    return {
+      code: "engine_missing",
+      message:
+        "Veyra's download engine isn't installed on this server. Install yt-dlp and make sure it's on PATH, or set VEYRA_ENGINE_PATH to the binary.",
+    };
+  }
   if (s.includes("unsupported url")) {
     return { code: "unsupported", message: "This link isn't supported yet. Try a direct link from the platform's share button." };
   }
@@ -57,7 +203,7 @@ export function classifyError(stderr: string): { code: string; message: string }
 function runEngineJson(args: string[]): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     execFile(
-      ENGINE,
+      engineBinary(),
       args,
       { timeout: RESOLVE_TIMEOUT_MS, maxBuffer: 128 * 1024 * 1024, windowsHide: true },
       (err, stdout, stderr) => {
@@ -163,7 +309,7 @@ let cachedExtractors: string[] | null = null;
 export async function extractors(): Promise<string[]> {
   if (cachedExtractors) return cachedExtractors;
   const list = await new Promise<string[]>((resolve) => {
-    execFile(ENGINE, ["--list-extractors"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
+    execFile(engineBinary(), ["--list-extractors"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
       if (err) {
         resolve([]);
         return;
@@ -211,7 +357,7 @@ export function startDownload(opts: DownloadOptions): ChildProcess {
 
   args.push(opts.url);
 
-  const proc = spawn(ENGINE, args, { windowsHide: true });
+  const proc = spawn(engineBinary(), args, { windowsHide: true });
   let buf = "";
   proc.stdout?.on("data", (chunk: Buffer) => {
     buf += chunk.toString("utf8");

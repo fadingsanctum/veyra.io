@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { FaqItem } from "@/components/faq";
 import { SiteSearch } from "@/components/site-search";
-import { extractorCount } from "@/lib/engine";
+import { engineAvailable, extractorCount } from "@/lib/engine";
 import { Link2, ListVideo, Upload } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -104,11 +104,13 @@ const TROUBLESHOOT: { code: string; symptom: string; fix: string }[] = [
   { code: "network", symptom: "“Couldn't reach the platform.”", fix: "Transient network or DNS failure. Wait a moment and try again — most resolve on retry." },
   { code: "format_unavailable", symptom: "“That format isn't available.”", fix: "The source stopped serving that variant. Pick the next quality down." },
   { code: "ffmpeg", symptom: "Post-processing failed.", fix: "Merging or conversion needs FFmpeg on the worker. Pick a single-file format instead." },
+  { code: "engine_missing", symptom: "“Veyra's download engine isn't installed.”", fix: "The worker doesn't have yt-dlp on PATH. The server admin should install it (pip install yt-dlp) or set VEYRA_ENGINE_PATH." },
   { code: "rate_limited", symptom: "“Too many requests.”", fix: "You've hit the per-IP window. Wait the stated seconds and continue." },
 ];
 
 export default async function HelpPage() {
   const count = await extractorCount();
+  const engineUp = engineAvailable();
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-14 sm:px-6">
@@ -117,6 +119,18 @@ export default async function HelpPage() {
         title="Help & FAQ"
         description="Paste → pick format → download. Three steps, every platform Veyra can reach."
       />
+
+      {!engineUp && (
+        <div className="mt-8 rounded-xl border border-blood/50 bg-blood/10 p-5">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.24em] text-blood">Engine offline</h2>
+          <p className="mt-2 text-sm leading-relaxed text-bone/85">
+            Veyra&apos;s download engine isn&apos;t installed or reachable on this server, so downloads
+            can&apos;t run right now. The server admin should install <code className="font-mono text-ember">yt-dlp</code>{" "}
+            and add it to PATH, or set <code className="font-mono text-ember">VEYRA_ENGINE_PATH</code> to the
+            engine binary.
+          </p>
+        </div>
+      )}
 
       {/* 3-step walkthrough */}
       <section className="mt-10">
