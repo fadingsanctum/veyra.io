@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { startDownload, classifyError } from "./engine";
+import { bootstrapEngine, startDownload, classifyError } from "./engine";
 import type { Job } from "./types";
 
 const JOBS_ROOT = path.join(os.tmpdir(), "veyra-jobs");
@@ -123,6 +123,11 @@ class JobQueue {
       this.fail(job, `Could not create temp directory: ${(e as Error).message}`);
       return;
     }
+
+    // Auto-install the engine if it isn't present yet — the first job on a
+    // fresh worker waits for the install so it succeeds instead of failing.
+    // If the install fails, the spawn below ENOENTs and surfaces engine_missing.
+    await bootstrapEngine();
 
     const proc = startDownload({
       url: spec.url,

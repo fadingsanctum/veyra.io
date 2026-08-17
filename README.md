@@ -25,7 +25,10 @@ npm run dev
 
 Requirements for the backend to actually work:
 
-- The engine binary on `PATH` (or set `VEYRA_ENGINE_PATH=/path/to/engine`)
+- The engine binary on `PATH` (or set `VEYRA_ENGINE_PATH=/path/to/engine`) — if it
+  isn't found, the server **auto-downloads the official yt-dlp binary** to
+  `~/.veyra/bin` on first use, so fresh workers work with zero setup. Disable
+  that with `VEYRA_NO_AUTO_BOOTSTRAP=1` (e.g. air-gapped hosts).
 - `ffmpeg` on `PATH` (needed for merging video+audio and audio conversion)
 
 Keep the engine updated regularly — new-site support is inherited
@@ -94,6 +97,7 @@ queue (e.g. BullMQ) — the route handlers and client poller don't need to chang
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `VEYRA_ENGINE_PATH` | engine binary name | Path to the download engine binary |
+| `VEYRA_NO_AUTO_BOOTSTRAP` | `0` | Set to `1` to disable auto-downloading the engine when it's missing |
 | `VEYRA_MAX_CONCURRENT` | `3` | Hard cap on concurrent downloads |
 
 ## Legal

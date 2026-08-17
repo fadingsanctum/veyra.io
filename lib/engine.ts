@@ -34,6 +34,75 @@ const RESOLVE_TIMEOUT_MS = 90_000;
 const ENGINE_NAME = "yt-dlp";
 const ENGINE_NAME_WIN = "yt-dlp.exe";
 
+/**
+ * Self-bootstrap: when the engine is missing we download the official yt-dlp
+ * binary into ~/.veyra/bin (once per machine/container) and use that. This
+ * makes fresh workers work with zero manual setup. Set VEYRA_NO_AUTO_BOOTSTRAP=1
+ * to disable (e.g. air-gapped hosts that must fail loudly instead).
+ */
+const BOOTSTRAP_ENABLED = process.env.VEYRA_NO_AUTO_BOOTSTRAP !== "1";
+const BOOTSTRAP_DIR = path.join(os.homedir(), ".veyra", "bin");
+let bootstrapPromise: Promise<string | null> | null = null;
+
+/** Official static binaries, per platform. */
+function bootstrapUrl(): string {
+  const base = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+  if (process.platform === "win32") return `${base}/yt-dlp.exe`;
+  if (process.platform === "darwin") return `${base}/yt-dlp_macos`;
+  return `${base}/${process.arch === "arm64" ? "yt-dlp_linux_aarch64" : "yt-dlp_linux"}`;
+}
+
+async function downloadEngine(): Promise<string | null> {
+  const url = bootstrapUrl();
+  const target = path.join(BOOTSTRAP_DIR, process.platform === "win32" ? ENGINE_NAME_WIN : ENGINE_NAME);
+  try {
+    fs.mkdirSync(BOOTSTRAP_DIR, { recursive: true });
+    const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    fs.writeFileSync(target, buf);
+    if (process.platform !== "win32") fs.chmodSync(target, 0o755);
+
+    // Verify it actually runs before trusting it.
+    const version = await new Promise<string>((resolve, reject) => {
+      execFile(target, ["--version"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
+        if (err) reject(err);
+        else resolve(stdout.trim());
+      });
+    });
+    console.warn(`[veyra] Download engine auto-installed (yt-dlp ${version}) at ${target}`);
+    return target;
+  } catch (e) {
+    console.warn(
+      `[veyra] Could not auto-install the download engine: ${(e as Error).message}. ` +
+        `Install yt-dlp manually or set VEYRA_ENGINE_PATH to the binary.`,
+    );
+    try {
+      fs.rmSync(target, { force: true });
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+/**
+ * Ensure the engine binary exists. Resolves immediately when one is already
+ * available; otherwise starts (once) the auto-install and waits for it.
+ * Returns the binary path, or null if the engine is unavailable.
+ */
+export function bootstrapEngine(): Promise<string | null> {
+  if (resolveEngine().found) return Promise.resolve(engineBinary());
+  if (!BOOTSTRAP_ENABLED) return Promise.resolve(null);
+  if (!bootstrapPromise) {
+    bootstrapPromise = downloadEngine().then((binary) => {
+      if (binary) cachedResolve = { binary, found: true };
+      return binary;
+    });
+  }
+  return bootstrapPromise;
+}
+
 /** Directories where the engine commonly lands without being on PATH. */
 function commonEngineDirs(): string[] {
   const home = os.homedir();
@@ -141,6 +210,8 @@ function resolveEngine(): { binary: string; found: boolean } {
 
   // 4. Give up — spawn will fail with ENOENT, surfaced as `engine_missing`.
   cachedResolve = { binary: ENGINE_NAME, found: false };
+  // Kick off the auto-install in the background so it's ready for the next call.
+  if (BOOTSTRAP_ENABLED) void bootstrapEngine();
   return cachedResolve;
 }
 
@@ -273,6 +344,7 @@ function summarizeVideo(raw: Record<string, unknown>): VideoInfo {
  * their full format list.
  */
 export async function probeUrl(rawUrl: string): Promise<ResolveResult> {
+  await bootstrapEngine();
   const flat = await runEngineJson(["--flat-playlist", "-J", "--no-warnings", rawUrl]);
 
   const isPlaylist = flat._type === "playlist" || (Array.isArray(flat.entries) && (flat.entries as unknown[]).length > 0);
@@ -308,16 +380,18 @@ let cachedExtractors: string[] | null = null;
 
 export async function extractors(): Promise<string[]> {
   if (cachedExtractors) return cachedExtractors;
+  await bootstrapEngine();
   const list = await new Promise<string[]>((resolve) => {
     execFile(engineBinary(), ["--list-extractors"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
       if (err) {
+        // Don't cache a failure — the engine may be installed or bootstrapped later.
         resolve([]);
         return;
       }
       resolve(stdout.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#")));
     });
   });
-  cachedExtractors = list;
+  if (list.length > 0) cachedExtractors = list;
   return list;
 }
 
