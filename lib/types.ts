@@ -52,7 +52,7 @@ export type ResolveResult =
 
 export interface ApiErrorBody {
   ok: false;
-  error: { code: string; message: string };
+  error: { code: string; message: string; raw?: string | null };
 }
 
 export type JobStatus = "queued" | "running" | "done" | "error";
@@ -69,6 +69,8 @@ export interface Job {
   filename: string | null; // final file name on disk
   size: number | null; // bytes
   error: string | null;
+  /** Raw engine stderr behind the classified error, so real causes are visible. */
+  errorRaw: string | null;
   createdAt: number;
   updatedAt: number;
 }

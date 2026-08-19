@@ -61,6 +61,7 @@ class JobQueue {
       filename: null,
       size: null,
       error: null,
+      errorRaw: null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -180,7 +181,10 @@ class JobQueue {
         job.eta = null;
         job.updatedAt = Date.now();
       } else {
-        this.fail(job, `The download engine exited with code ${code}.`);
+        // Prefer the engine's own ERROR line (captured in handleLine) over a
+        // generic exit-code message, so the real cause stays visible.
+        const raw = job.errorRaw?.trim() || `The download engine exited with code ${code}.`;
+        this.fail(job, raw);
       }
     });
   }
@@ -210,7 +214,9 @@ class JobQueue {
 
     // Playlist-style lines are not expected (single URL per job), but capture errors
     if (line.startsWith("ERROR:")) {
-      job.error = line.slice(6).trim();
+      const raw = line.slice(6).trim();
+      job.error = raw;
+      job.errorRaw = raw;
     }
   }
 
@@ -218,6 +224,7 @@ class JobQueue {
     if (job.status === "error" || job.status === "done") return;
     const cls = classifyError(message);
     job.status = "error";
+    job.errorRaw = message;
     job.error = cls.message;
     job.updatedAt = Date.now();
   }

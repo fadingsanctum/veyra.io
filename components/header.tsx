@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Moon, MoonStar, Menu, Sun, X } from "lucide-react";
 import { Emblem } from "./emblem";
+import { EnginePill } from "./engine-pill";
 import { useSettings, type ThemeName } from "@/store/settings";
 
 const NAV = [
@@ -60,6 +61,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <EnginePill />
           <button
             onClick={cycleTheme}
             className="flex h-9 w-9 items-center justify-center rounded border border-rust text-dim transition-colors hover:border-ember/60 hover:text-ember"

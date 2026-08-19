@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Clock, Eye, Link2, ListVideo, Loader2, RotateCcw, Upload, X } from "lucide-react";
-import { useDownloader, useJobs } from "@/store/downloader";
+import { useDownloader, useJobs, useEngine } from "@/store/downloader";
 import { useSettings } from "@/store/settings";
 import { buildChoices, buildDownloadPayload, AUDIO_FORMATS, VIDEO_CONTAINERS, formatDuration, formatViews, type FormatChoice } from "@/lib/format";
 import type { Job, MediaType, VideoInfo } from "@/lib/types";
@@ -26,10 +26,15 @@ const AUTO_CHOICE: FormatChoice = {
 export function Downloader() {
   const settings = useSettings();
   const { url, status, result, error, setUrl, resolve, clear } = useDownloader();
+  const { engineStatus, engineUrl, checkEngine } = useEngine();
   const jobs = useJobs((s) => s.jobs);
   const upsertJob = useJobs((s) => s.upsertJob);
   const removeJob = useJobs((s) => s.removeJob);
   const addHistory = useJobs((s) => s.addHistory);
+
+  useEffect(() => {
+    checkEngine();
+  }, [checkEngine]);
 
   const [type, setType] = useState<MediaType>(settings.defaultType);
   const [quality, setQuality] = useState("auto");
@@ -69,12 +74,17 @@ export function Downloader() {
   const triggerSave = (job: Job) => {
     if (savedRef.current.has(job.id)) return;
     savedRef.current.add(job.id);
-    const a = document.createElement("a");
-    a.href = `/api/jobs/${job.id}/file`;
-    a.download = job.filename ?? "download";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const { engineStatus, engineUrl } = useEngine.getState();
+    if (engineStatus === "connected") {
+      fetch(`${engineUrl}/v1/jobs/${job.id}/open-folder`, { method: "POST" });
+    } else {
+      const a = document.createElement("a");
+      a.href = `/api/jobs/${job.id}/file`;
+      a.download = job.filename ?? "download";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
   };
 
   /* ---------------- job polling + auto-save + history ---------------- */
@@ -85,8 +95,11 @@ export function Downloader() {
     let cancelled = false;
 
     const tick = async () => {
+      const { engineStatus, engineUrl } = useEngine.getState();
+      const isLocal = engineStatus === "connected";
+      const base = isLocal ? `${engineUrl}/v1/jobs` : "/api/jobs";
       try {
-        const res = await fetch("/api/jobs");
+        const res = await fetch(base);
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled || !data.ok) return;
@@ -160,9 +173,12 @@ export function Downloader() {
     if (!choice) return;
     setStarting(true);
     setActionError(null);
+    const { engineStatus: status, engineUrl: base } = useEngine.getState();
+    const isLocal = status === "connected";
+    const url = isLocal ? `${base}/v1/download` : "/api/download";
     try {
       const payload = buildDownloadPayload(targetUrl, t, choice, cont, settings.filenameTemplate);
-      const res = await fetch("/api/download", {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, concurrentLimit: settings.concurrentLimit }),
@@ -184,10 +200,14 @@ export function Downloader() {
     if (result?.kind !== "playlist") return;
     const entries = result.playlist.entries.slice(0, MAX_BATCH);
     setActionError(null);
+    const { engineStatus, engineUrl } = useEngine.getState();
+    const isLocal = engineStatus === "connected";
+    const base = isLocal ? `${engineUrl}/v1/download` : "/api/download";
+
     for (const e of entries) {
       try {
         const payload = buildDownloadPayload(e.url, "video+audio", { id: "auto", label: "auto", sub: "", format: "bestvideo+bestaudio/best", height: null, ext: null }, settings.defaultContainer, settings.filenameTemplate);
-        const res = await fetch("/api/download", {
+        const res = await fetch(base, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...payload, concurrentLimit: settings.concurrentLimit }),
@@ -202,8 +222,11 @@ export function Downloader() {
 
   const cancelJob = async (id: string) => {
     removeJob(id);
+    const { engineStatus, engineUrl } = useEngine.getState();
+    const isLocal = engineStatus === "connected";
+    const base = isLocal ? `${engineUrl}/v1/jobs/${id}` : `/api/jobs/${id}`;
     try {
-      await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      await fetch(base, { method: "DELETE" });
     } catch {
       /* gone */
     }
@@ -307,6 +330,17 @@ export function Downloader() {
             className="mt-4 rounded-lg border border-blood/60 bg-blood/10 p-4"
           >
             <p className="text-sm font-medium text-bone">{error.message}</p>
+            {error.raw && (
+              <details className="mt-2.5 group">
+                <summary className="font-mono cursor-pointer select-none text-[10px] uppercase tracking-[0.18em] text-dim/70 transition-colors hover:text-dim">
+                  <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span>
+                  What the platform actually said
+                </summary>
+                <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md border border-rust bg-void/70 p-2.5 font-mono text-[10px] leading-relaxed text-dim">
+                  {error.raw}
+                </pre>
+              </details>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button
                 onClick={clear}
@@ -370,7 +404,12 @@ export function Downloader() {
 
       {/* ============ queue ============ */}
       {jobs.length > 0 && (
-        <QueueView jobs={jobs} onCancel={cancelJob} onSave={triggerSave} />
+        <QueueView
+          jobs={jobs}
+          onCancel={cancelJob}
+          onSave={triggerSave}
+          onOpenFolder={triggerSave}
+        />
       )}
 
       {/* ============ sticky mini progress (mobile) ============ */}

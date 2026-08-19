@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, History, Moon, MoonStar, RotateCcw, Sun } from "lucide-react";
+import { Check, Folder, FolderOpen, History, Moon, MoonStar, RotateCcw, Sun } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useSettings, type ThemeName } from "@/store/settings";
-import { useJobs } from "@/store/downloader";
+import { useJobs, useEngine } from "@/store/downloader";
 import { AUDIO_FORMATS, VIDEO_CONTAINERS, formatBytes } from "@/lib/format";
 import type { MediaType } from "@/lib/types";
+import { useState } from "react";
 
 const THEMES: { id: ThemeName; label: string; icon: typeof Moon }[] = [
   { id: "dark", label: "Dark", icon: Moon },
@@ -285,10 +286,7 @@ export default function SettingsPage() {
           />
         </Row>
 
-        <Row
-          label="Downloads at the same time"
-          hint="How many files Veyra processes side by side. More = faster batches, heavier on the server."
-        >
+        <Row label="Concurrent downloads" hint="Max side-by-side downloads.">
           <div className="flex items-center gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
@@ -303,6 +301,28 @@ export default function SettingsPage() {
                 {n}
               </button>
             ))}
+          </div>
+        </Row>
+
+        <Row label="Download folder" hint="Where Veyra saves your files.">
+          <div className="flex items-center gap-3">
+             <input
+               className="rounded-md border border-rust bg-void/40 px-3 py-2 text-xs text-bone font-mono"
+               value={s.downloadFolder ?? ""}
+               readOnly
+               placeholder="System Downloads"
+             />
+             <button
+               onClick={async () => {
+                 const { engineStatus, engineUrl } = useEngine.getState();
+                 if (engineStatus !== "connected") return;
+                 // Note: requires engine-side support to trigger folder picker
+                 // For now just showing current path
+               }}
+               className="flex items-center gap-2 rounded-md border border-rust px-3 py-2 text-xs text-dim hover:text-bone"
+             >
+               <Folder size={14} /> Change
+             </button>
           </div>
         </Row>
       </div>

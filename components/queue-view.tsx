@@ -1,15 +1,17 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, Download, Loader2, Trash2, X, XCircle } from "lucide-react";
+import { CheckCircle2, Download, FolderOpen, Loader2, Trash2, X, XCircle } from "lucide-react";
 import type { Job } from "@/lib/types";
 import { formatBytes } from "@/lib/format";
 import { ProgressCrack } from "./progress-crack";
+import { useEngine } from "@/store/downloader";
 
 interface QueueViewProps {
   jobs: Job[];
   onCancel: (id: string) => void;
   onSave: (job: Job) => void;
+  onOpenFolder: (job: Job) => void;
 }
 
 const STATUS_META: Record<Job["status"], { label: string; icon: typeof Loader2 }> = {
@@ -19,7 +21,9 @@ const STATUS_META: Record<Job["status"], { label: string; icon: typeof Loader2 }
   error: { label: "Failed", icon: XCircle },
 };
 
-export function QueueView({ jobs, onCancel, onSave }: QueueViewProps) {
+export function QueueView({ jobs, onCancel, onSave, onOpenFolder }: QueueViewProps) {
+  const { engineStatus } = useEngine();
+  const isLocal = engineStatus === "connected";
   return (
     <section aria-label="Download queue" className="mt-8 w-full">
       <div className="mb-3 flex items-center justify-between">
@@ -60,11 +64,12 @@ export function QueueView({ jobs, onCancel, onSave }: QueueViewProps) {
                     {job.status === "done" && (
                       <>
                         <button
-                          onClick={() => onSave(job)}
+                          onClick={() => isLocal ? onOpenFolder(job) : onSave(job)}
                           className="flex h-8 items-center gap-1.5 rounded-md bg-blood px-3 text-xs font-medium text-bone transition-colors hover:bg-ember"
-                          aria-label={`Save ${job.filename ?? "file"}`}
+                          aria-label={isLocal ? "Open folder" : `Save ${job.filename ?? "file"}`}
                         >
-                          <Download size={13} /> Save
+                          {isLocal ? <FolderOpen size={13} /> : <Download size={13} />}
+                          {isLocal ? "Open" : "Save"}
                         </button>
                         <button
                           onClick={() => onCancel(job.id)}
@@ -100,6 +105,18 @@ export function QueueView({ jobs, onCancel, onSave }: QueueViewProps) {
                 <div className="mt-3">
                   <ProgressCrack percent={job.progress} status={job.status} />
                 </div>
+
+                {job.status === "error" && job.errorRaw && job.errorRaw !== job.error && (
+                  <details className="mt-2.5 group">
+                    <summary className="font-mono cursor-pointer select-none text-[10px] uppercase tracking-[0.16em] text-dim/70 transition-colors hover:text-dim">
+                      <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span>
+                      What the platform actually said
+                    </summary>
+                    <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md border border-rust bg-void/70 p-2.5 font-mono text-[10px] leading-relaxed text-dim">
+                      {job.errorRaw}
+                    </pre>
+                  </details>
+                )}
 
                 <div className="font-mono mt-2 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-dim">
                   <span className={`flex items-center gap-1.5 ${job.status === "error" ? "text-blood" : job.status === "done" ? "text-ember" : ""}`}>

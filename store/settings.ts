@@ -15,6 +15,7 @@ export interface Settings {
   autoDownload: boolean;
   concurrentLimit: number;
   filenameTemplate: string;
+  downloadFolder: string | null;
   reducedMotion: boolean;
 }
 
@@ -27,6 +28,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoDownload: true,
   concurrentLimit: 3,
   filenameTemplate: "%(title)s.%(ext)s",
+  downloadFolder: null,
   reducedMotion: false,
 };
 

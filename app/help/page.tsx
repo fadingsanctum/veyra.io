@@ -46,10 +46,15 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     q: "Why can't I download private or age-restricted content?",
     a: (
       <>
-        Veyra only works with public content. Private videos, members-only content, and
-        age-restricted pages require account cookies, which Veyra deliberately never handles.
-        If you get an <code className="font-mono text-ember">age_restricted</code> error, that&apos;s
-        the platform guarding it — not a bug.
+        Veyra only works with public content. A real age gate surfaces as an
+        <code className="font-mono text-ember">age_restricted</code> error — that&apos;s the platform
+        guarding it, not a bug. Two related errors mean the platform wants a session, not that the
+        content is private: <code className="font-mono text-ember">blocked</code> (the worker&apos;s
+        server IP tripped a bot check — common on datacenter IPs) and
+        <code className="font-mono text-ember">login_required</code> (the platform only serves
+        logged-in sessions, e.g. Instagram and Pinterest). An admin can unlock both by adding your
+        own session cookies to the worker (<code className="font-mono text-ember">VEYRA_COOKIES</code> /
+        <code className="font-mono text-ember">VEYRA_COOKIES_FILE</code>).
       </>
     ),
   },
@@ -100,7 +105,10 @@ const TROUBLESHOOT: { code: string; symptom: string; fix: string }[] = [
   { code: "invalid_url", symptom: "“That doesn't look like a valid link.”", fix: "Paste the full URL including https:// — short links like bit.ly work, but raw text or search terms don't." },
   { code: "unsupported", symptom: "“This link isn't supported yet.”", fix: "The platform may be new or behind an app-only wall. Try the platform's share button to get a direct link." },
   { code: "unavailable", symptom: "“This video is unavailable.”", fix: "The video was removed, made private, or geo-blocked in the worker's region. Nothing to do on your end." },
-  { code: "age_restricted", symptom: "“This content is private or age-restricted.”", fix: "Veyra never logs into accounts. Public content only — see the FAQ above." },
+  { code: "drm", symptom: "“This platform serves DRM-protected content.”", fix: "DRM-encrypted streams (Spotify, some VOD services) can't be ripped by any tool. Veyra only works with platforms that serve open streams." },
+  { code: "age_restricted", symptom: "“This content is age-restricted.”", fix: "The platform age-gates this content. Veyra only handles public, non-gated content — see the FAQ above." },
+  { code: "blocked", symptom: "“The platform flagged this request as a bot.”", fix: "The worker's server IP tripped the platform's bot check (normal for datacenter IPs). Retry later — or have the admin add your session cookies via VEYRA_COOKIES / VEYRA_COOKIES_FILE." },
+  { code: "login_required", symptom: "“This platform only serves logged-in sessions.”", fix: "Instagram, Pinterest and others refuse anonymous servers. The admin can set VEYRA_COOKIES / VEYRA_COOKIES_FILE with your own cookies to unlock them." },
   { code: "network", symptom: "“Couldn't reach the platform.”", fix: "Transient network or DNS failure. Wait a moment and try again — most resolve on retry." },
   { code: "format_unavailable", symptom: "“That format isn't available.”", fix: "The source stopped serving that variant. Pick the next quality down." },
   { code: "ffmpeg", symptom: "Post-processing failed.", fix: "Merging or conversion needs FFmpeg on the worker. Pick a single-file format instead." },

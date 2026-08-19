@@ -36,7 +36,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     if (e instanceof EngineError) {
-      return NextResponse.json({ ok: false, error: { code: e.code, message: e.message } }, { status: 422 });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: { code: e.code, message: e.message, raw: (e.stderr ?? "").slice(0, 4000) || null },
+        },
+        { status: 422 },
+      );
     }
     return NextResponse.json(
       { ok: false, error: { code: "unknown", message: "Unexpected error while probing the link. Try again." } },

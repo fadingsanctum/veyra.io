@@ -254,6 +254,58 @@ export function engineAvailable(): boolean {
   return resolveEngine().found;
 }
 
+/*
+ * Optional session cookies.
+ *
+ * Some platforms only serve content to logged-in sessions (Instagram,
+ * Pinterest…) and many bot-check datacenter IPs (YouTube). Admins can pass
+ * their own cookies — exported as a Netscape cookies.txt, e.g. with the
+ * "Get cookies.txt LOCALLY" browser extension — either as a file path
+ * (VEYRA_COOKIES_FILE, for VPS/Docker hosts with mounts) or inline content
+ * (VEYRA_COOKIES, the easy option on hosts without disk mounts like Render).
+ */
+let resolvedCookies: string | null | undefined;
+
+function resolveCookiesFile(): string | null {
+  if (resolvedCookies !== undefined) return resolvedCookies;
+
+  const fromPath = process.env.VEYRA_COOKIES_FILE?.trim();
+  if (fromPath) {
+    try {
+      if (fs.statSync(fromPath).isFile()) {
+        resolvedCookies = fromPath;
+        return resolvedCookies;
+      }
+    } catch {
+      /* fall through to inline content */
+    }
+    console.warn(`[veyra] VEYRA_COOKIES_FILE set but not readable: ${fromPath}`);
+  }
+
+  const content = process.env.VEYRA_COOKIES;
+  if (content && content.trim()) {
+    try {
+      const dir = path.join(os.tmpdir(), "veyra");
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, "cookies.txt");
+      fs.writeFileSync(file, content, { mode: 0o600 });
+      resolvedCookies = file;
+      return resolvedCookies;
+    } catch (e) {
+      console.warn(`[veyra] Could not write VEYRA_COOKIES to temp: ${(e as Error).message}`);
+    }
+  }
+
+  resolvedCookies = null;
+  return null;
+}
+
+/** Engine args to pass an authenticated session, if cookies are configured. */
+function cookiesArgs(): string[] {
+  const file = resolveCookiesFile();
+  return file ? ["--cookies", file] : [];
+}
+
 export class EngineError extends Error {
   code: string;
   stderr: string;
@@ -280,8 +332,36 @@ export function classifyError(stderr: string): { code: string; message: string }
   if (s.includes("video unavailable") || s.includes("is unavailable") || s.includes("has been removed")) {
     return { code: "unavailable", message: "This video is unavailable — it may have been removed or made private." };
   }
-  if (s.includes("sign in to confirm") || s.includes("age-restricted") || s.includes("age restricted") || s.includes("log in")) {
-    return { code: "age_restricted", message: "This content is private or age-restricted. Veyra only downloads public content you have permission to access." };
+  // DRM-protected platforms (Spotify, some VOD/catch-up services) — the engine
+  // refuses these outright because the media stream itself is encrypted.
+  if (s.includes("known to use drm") || s.includes("drm protection") || s.includes("drm-protected") || s.includes("is protected by drm")) {
+    return {
+      code: "drm",
+      message:
+        "This platform serves DRM-protected content, which can't be downloaded. Veyra only works with platforms that serve open (non-encrypted) streams.",
+    };
+  }
+  // Platform guardrails. These look alike but mean very different things:
+  //  - "confirm your age" = a real age gate (checked first — "Sign in to confirm
+  //    your age" is an age gate, not a bot check)
+  //  - "sign in to confirm you're not a bot" = bot check (common from datacenter IPs)
+  //  - "log in" / "login required" = hard login wall (needs session cookies)
+  if (s.includes("age-restricted") || s.includes("age restricted") || s.includes("age-gated") || s.includes("confirm your age") || s.includes("age verification") || s.includes("age-verification")) {
+    return { code: "age_restricted", message: "This content is age-restricted. Veyra only downloads public content you have permission to access." };
+  }
+  if (s.includes("sign in to confirm") || s.includes("verify you're not a bot") || s.includes("confirm you're not a bot") || s.includes("not a robot") || s.includes("captcha")) {
+    return {
+      code: "blocked",
+      message:
+        "The platform flagged this request as a bot (common from server/datacenter IPs) and demanded sign-in confirmation. Try again later — or have an admin add session cookies to the worker (VEYRA_COOKIES / VEYRA_COOKIES_FILE).",
+    };
+  }
+  if (s.includes("log in") || s.includes("login required") || s.includes("login is required") || s.includes("must be logged in") || s.includes("authentication required")) {
+    return {
+      code: "login_required",
+      message:
+        "This platform only serves content to logged-in sessions, and Veyra's server has none. An admin can add your own cookies (VEYRA_COOKIES / VEYRA_COOKIES_FILE) to unlock these platforms.",
+    };
   }
   if (s.includes("timed out") || s.includes("connection") || s.includes("unable to download webpage") || s.includes("network") || s.includes("errno")) {
     return {
@@ -301,10 +381,11 @@ export function classifyError(stderr: string): { code: string; message: string }
 }
 
 function runEngineJson(args: string[]): Promise<Record<string, unknown>> {
+  const allArgs = [...cookiesArgs(), ...args];
   return new Promise((resolve, reject) => {
     execFile(
       engineBinary(),
-      args,
+      allArgs,
       { timeout: RESOLVE_TIMEOUT_MS, maxBuffer: 128 * 1024 * 1024, windowsHide: true },
       (err, stdout, stderr) => {
         if (err) {
@@ -442,6 +523,7 @@ export interface DownloadOptions {
 /** Spawn a real download; lines are emitted for progress parsing. */
 export function startDownload(opts: DownloadOptions): ChildProcess {
   const args = [
+    ...cookiesArgs(),
     "--newline",
     "--progress",
     "--no-warnings",

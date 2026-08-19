@@ -1,0 +1,16 @@
+{
+  "name": "veyra-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build ./src/server.ts --compile --target=bun-windows-x64 --outfile=../dist/veyra-engine.exe"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^7.0.2"
+  }
+}

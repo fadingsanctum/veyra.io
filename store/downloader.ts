@@ -4,13 +4,38 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { HistoryEntry, Job, ResolveResult } from "@/lib/types";
 
+/* ---------------- engine status ---------------- */
+
+interface EngineState {
+  engineStatus: "checking" | "connected" | "disconnected";
+  engineUrl: string;
+  checkEngine: () => Promise<void>;
+}
+
+export const useEngine = create<EngineState>()((set) => ({
+  engineStatus: "checking",
+  engineUrl: "http://127.0.0.1:9911",
+  checkEngine: async () => {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 600);
+      const res = await fetch("http://127.0.0.1:9911/v1/status", { signal: controller.signal });
+      clearTimeout(id);
+      if (res.ok) set({ engineStatus: "connected" });
+      else set({ engineStatus: "disconnected" });
+    } catch {
+      set({ engineStatus: "disconnected" });
+    }
+  },
+}));
+
 /* ------------------------- resolve flow ------------------------- */
 
 interface DownloaderState {
   url: string;
   status: "idle" | "probing" | "resolved" | "error";
   result: ResolveResult | null;
-  error: { code: string; message: string } | null;
+  error: { code: string; message: string; raw?: string | null } | null;
   lastResolvedUrl: string | null;
   setUrl: (url: string) => void;
   resolve: (url: string) => Promise<void>;
@@ -28,8 +53,12 @@ export const useDownloader = create<DownloaderState>()((set) => ({
 
   resolve: async (url) => {
     set({ status: "probing", error: null, result: null, url, lastResolvedUrl: url });
+    const { engineStatus, engineUrl } = useEngine.getState();
+    const isLocal = engineStatus === "connected";
+    const base = isLocal ? `${engineUrl}/v1/probe` : "/api/resolve";
+
     try {
-      const res = await fetch("/api/resolve", {
+      const res = await fetch(base, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
