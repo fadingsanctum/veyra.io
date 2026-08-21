@@ -99,7 +99,7 @@ export function Downloader() {
       const isLocal = engineStatus === "connected";
       const base = isLocal ? `${engineUrl}/v1/jobs` : "/api/jobs";
       try {
-        const res = await fetch(base);
+        const res = await fetch(base, { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled || !data.ok) return;

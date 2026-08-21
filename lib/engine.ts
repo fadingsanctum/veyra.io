@@ -543,25 +543,32 @@ export function startDownload(opts: DownloadOptions): ChildProcess {
   args.push(opts.url);
 
   const proc = spawn(engineBinary(), args, { windowsHide: true });
-  let buf = "";
-  proc.stdout?.on("data", (chunk: Buffer) => {
-    buf += chunk.toString("utf8");
+  let stdoutBuf = "";
+  let stderrBuf = "";
+  /** Emit a complete line from the buffer, splitting on any \r or \n. */
+  function drainBuffer(rawBuf: string, isStderr: boolean): string {
+    let b = rawBuf;
     let idx: number;
-    while ((idx = buf.indexOf("\n")) !== -1) {
-      const line = buf.slice(0, idx).replace(/\r$/, "");
-      buf = buf.slice(idx + 1);
-      opts.onLine(line);
+    // Split on individual \r or \n (not just \n) so \r-only progress
+    // updates from yt-dlp are handled even if --newline is imperfect.
+    while ((idx = b.search(/[\r\n]/)) !== -1) {
+      const line = b.slice(0, idx).replace(/\r$/, "");
+      b = b.slice(idx + 1);
+      if (line.trim()) opts.onLine(line.trim());
     }
+    return b;
+  }
+  proc.stdout?.on("data", (chunk: Buffer) => {
+    stdoutBuf += chunk.toString("utf8");
+    stdoutBuf = drainBuffer(stdoutBuf, false);
   });
   proc.stderr?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString("utf8");
-    // progress lines can land on stderr too
-    for (const line of text.split(/\r?\n/)) {
-      if (line.trim()) opts.onLine(line);
-    }
+    stderrBuf += chunk.toString("utf8");
+    stderrBuf = drainBuffer(stderrBuf, true);
   });
   proc.on("close", () => {
-    if (buf.trim()) opts.onLine(buf.trim());
+    if (stdoutBuf.trim()) opts.onLine(stdoutBuf.trim());
+    if (stderrBuf.trim()) opts.onLine(stderrBuf.trim());
   });
   return proc;
 }

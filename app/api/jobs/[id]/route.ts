@@ -11,7 +11,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!ID_RE.test(id)) return NextResponse.json({ ok: false, error: { code: "not_found", message: "Job not found." } }, { status: 404 });
   const job = jobQueue.get(id);
   if (!job) return NextResponse.json({ ok: false, error: { code: "not_found", message: "Job not found." } }, { status: 404 });
-  return NextResponse.json({ ok: true, job });
+  return NextResponse.json(
+    { ok: true, job },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    },
+  );
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

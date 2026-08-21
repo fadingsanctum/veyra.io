@@ -3,6 +3,16 @@
 A dark, cinematic, "beyond-the-walls" themed **universal media downloader**.
 One URL box. Every platform (1800+). Every format it can produce.
 
+> **⚠️ Vercel / serverless deployment will NOT work.**
+> The download engine needs an always-on Node.js process, child process
+> spawning (`yt-dlp`), and a writable filesystem — none of which serverless
+> platforms provide. See [Deploying for real](#deploying-for-real-why-vercel-alone-fails)
+> for working alternatives (Render, Oracle VPS, Docker).
+>
+> **GitHub:** the `engine/` directory (binaries, FFmpeg DLLs) is excluded
+> from git via `.gitignore`. It's only needed for local dev. Deploy via
+> the `Dockerfile` which installs `yt-dlp` + `ffmpeg` automatically.
+
 ---
 
 ## Stack

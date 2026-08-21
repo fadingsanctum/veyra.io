@@ -10,6 +10,10 @@
 !.yarn/releases
 !.yarn/versions
 
+# engine directory — binaries, FFmpeg DLLs, local node_modules
+# These are only needed for local dev / VPS. Deploy via Dockerfile instead.
+/engine/
+
 # testing
 /coverage
 
@@ -39,3 +43,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# binaries that should never be in git
+*.exe
+*.dll
+*.so
+*.dylib
+*.bin

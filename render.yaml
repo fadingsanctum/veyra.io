@@ -1,18 +1,23 @@
-# Render Blueprint — deploy on Render's free tier:
-#   1. Sign up at https://render.com (free, no credit card)
-#   2. New + → Blueprint → pick this repo
-# The free web service sleeps after 15 min of inactivity (~50s cold start on
-# the first request) — fine for a personal tool. For always-on, use a paid
-# plan or a free VPS (see README → "Deploying for real").
 services:
   - type: web
     name: veyra
-    runtime: docker
+    runtime: image
+    image:
+      url: # filled by Render when building from Dockerfile
     plan: free
-    dockerfilePath: ./Dockerfile
     healthCheckPath: /
     envVars:
       - key: NODE_ENV
         value: production
       - key: VEYRA_MAX_CONCURRENT
-        value: "3"
+        value: 3
+      # Session cookies — paste your Netscape cookies.txt content here in the
+      # Render dashboard (Settings → Environment → VEYRA_COOKIES).  This unlocks
+      # login-walled platforms (Instagram, Pinterest) and softens YouTube bot
+      # checks from the datacenter IP.  Export with the "Get cookies.txt LOCALLY"
+      # browser extension while logged into the platforms you want to download from.
+      #
+      # IMPORTANT: Do NOT commit your cookies to the repo.  Set this value only
+      # in the Render dashboard as a Secret environment variable.
+      - key: VEYRA_COOKIES
+        sync: false  # set manually in Render dashboard — never committed
