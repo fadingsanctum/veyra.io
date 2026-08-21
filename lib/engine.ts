@@ -94,7 +94,7 @@ async function downloadEngine(): Promise<string | null> {
 
     // Verify it actually runs before trusting it.
     const version = await new Promise<string>((resolve, reject) => {
-      execFile(target, ["--version"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
+      execFile(/* turbopackIgnore: true */ target, ["--version"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
         if (err) reject(err);
         else resolve(stdout.trim());
       });
@@ -384,7 +384,7 @@ function runEngineJson(args: string[]): Promise<Record<string, unknown>> {
   const allArgs = [...cookiesArgs(), ...args];
   return new Promise((resolve, reject) => {
     execFile(
-      engineBinary(),
+      /* turbopackIgnore: true */ engineBinary(),
       allArgs,
       { timeout: RESOLVE_TIMEOUT_MS, maxBuffer: 128 * 1024 * 1024, windowsHide: true },
       (err, stdout, stderr) => {
@@ -492,7 +492,7 @@ export async function extractors(): Promise<string[]> {
   if (cachedExtractors) return cachedExtractors;
   await bootstrapEngine();
   const list = await new Promise<string[]>((resolve) => {
-    execFile(engineBinary(), ["--list-extractors"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
+    execFile(/* turbopackIgnore: true */ engineBinary(), ["--list-extractors"], { timeout: 30_000, windowsHide: true }, (err, stdout) => {
       if (err) {
         // Don't cache a failure — the engine may be installed or bootstrapped later.
         resolve([]);
@@ -542,7 +542,7 @@ export function startDownload(opts: DownloadOptions): ChildProcess {
 
   args.push(opts.url);
 
-  const proc = spawn(engineBinary(), args, { windowsHide: true });
+  const proc = spawn(/* turbopackIgnore: true */ engineBinary(), args, { windowsHide: true });
   let stdoutBuf = "";
   let stderrBuf = "";
   /** Emit a complete line from the buffer, splitting on any \r or \n. */
